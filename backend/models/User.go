@@ -1,21 +1,15 @@
 package models
 
-import (
-	"gorm.io/gorm"
-)
+import "gorm.io/gorm"
 
 type User struct {
 	gorm.Model
-	Id          uint     `gorm:"primaryKey;autoIncrement" json:"id"`
-	Username    string   `json:"username"`
-	Email       string   `json:"email"`
-	Password    string   `json:"password"`
-	About       string   `json:"about"`
-	PfpUrl      string   `json:"pfpUrl"`
-	BannerUrl   string   `json:"bannerUrl"`
-	Interests   []string `json:"interests"`
-	Friends     []int    `json:"friends"`
-	Posts       []int    `json:"posts"`
-	Rating      int      `json:"rating"`
-	Communities []int    `json:"communities"`
+	Username  string   `gorm:"uniqueIndex;not null" json:"username"`
+	Email     string   `gorm:"uniqueIndex;not null" json:"email"`
+	Password  string   `gorm:"not null" json:"-"` // never expose password in JSON
+	About     string   `json:"about"`
+	PfpUrl    string   `json:"pfpUrl"`
+	BannerUrl string   `json:"bannerUrl"`
+	Rating    int      `gorm:"default:0" json:"rating"`
+	Interests []string `gorm:"serializer:json" json:"interests"`
 }
