@@ -3,6 +3,7 @@ package routes
 import (
 	"bytefeed-backend/controllers"
 	"bytefeed-backend/middleware"
+	"bytefeed-backend/ws"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -12,12 +13,12 @@ import (
 func RegisterRoutes(r *mux.Router) {
 	api := r.PathPrefix("/api").Subrouter()
 
-	// ── Auth (public) ──────────────────────────────────────────────────────────
+	// Auth (public)
 	auth := api.PathPrefix("/auth").Subrouter()
 	auth.HandleFunc("/register", controllers.Register).Methods(http.MethodPost)
 	auth.HandleFunc("/login", controllers.Login).Methods(http.MethodPost)
 
-	// ── Protected routes (require JWT) ─────────────────────────────────────────
+	// Protected routes (require JWT)
 	protected := api.NewRoute().Subrouter()
 	protected.Use(middleware.AuthMiddleware)
 
@@ -82,4 +83,10 @@ func RegisterRoutes(r *mux.Router) {
 	protected.HandleFunc("/messages/{id}", controllers.EditMessage).Methods(http.MethodPut)
 	protected.HandleFunc("/messages/{id}", controllers.DeleteMessage).Methods(http.MethodDelete)
 	protected.HandleFunc("/dm/{userId}", controllers.GetDMHistory).Methods(http.MethodGet)
+
+	// ── WebSocket (auth handled inside handler via ?token=<jwt>) ──────────────
+	// WS routes are on the root router (not the /api subrouter) and do NOT go
+	// through AuthMiddleware — WS handshakes can't carry custom headers reliably.
+	r.HandleFunc("/ws/channel/{id}", ws.HandleChannelWS)
+	r.HandleFunc("/ws/dm/{userId}", ws.HandleDMWS)
 }

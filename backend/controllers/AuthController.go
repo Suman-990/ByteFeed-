@@ -12,7 +12,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// Bug fix: original had inverted condition (secret != "" triggered the fallback).
 func getJWTSecret() []byte {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
@@ -21,9 +20,6 @@ func getJWTSecret() []byte {
 	return []byte(secret)
 }
 
-// generateToken creates a signed JWT for the given user ID.
-// Bug fixes: original called .Unix as a property (not method) and passed the function
-// reference instead of its return value to SignedString.
 func generateToken(userID uint) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": userID,
@@ -31,9 +27,6 @@ func generateToken(userID uint) (string, error) {
 	})
 	return token.SignedString(getJWTSecret()) // getJWTSecret() — was missing ()
 }
-
-// ---- Request / Response structs ----
-// Bug fix: all fields were unexported (lowercase), so JSON decode/encode silently did nothing.
 
 type RegisterRequest struct {
 	Username  string   `json:"username"`
@@ -54,7 +47,6 @@ type AuthResponse struct {
 	Token    string `json:"token"`
 }
 
-// Register godoc
 // POST /api/auth/register
 func Register(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest
@@ -106,7 +98,6 @@ func Register(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Login godoc
 // POST /api/auth/login
 func Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest

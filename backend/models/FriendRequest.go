@@ -2,7 +2,6 @@ package models
 
 import "gorm.io/gorm"
 
-// FriendRequest handles the mutual friend system (both users must accept, like Facebook).
 // Status: "pending" | "accepted" | "rejected"
 type FriendRequest struct {
 	gorm.Model

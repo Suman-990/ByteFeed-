@@ -20,7 +20,7 @@ func ConnectCloudinary() {
 	secret := os.Getenv("CLOUDINARY_API_SECRET")
 
 	if name == "" || key == "" || secret == "" {
-		log.Println("⚠️  Cloudinary credentials not set — file uploads will be disabled")
+		log.Println("Cloudinary credentials not set — file uploads will be disabled")
 		return
 	}
 
@@ -29,7 +29,7 @@ func ConnectCloudinary() {
 		log.Fatalf("Failed to initialize Cloudinary: %v", err)
 	}
 	Cld = cld
-	fmt.Println("✅ Cloudinary connected")
+	fmt.Println("Cloudinary connected")
 }
 
 type UploadResult struct {

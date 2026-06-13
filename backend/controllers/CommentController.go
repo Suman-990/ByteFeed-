@@ -10,7 +10,6 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// CreateComment godoc
 // POST /api/posts/{id}/comments
 func CreateComment(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromCtx(r)

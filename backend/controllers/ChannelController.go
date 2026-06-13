@@ -9,21 +9,17 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// isCommunityMember checks if userID belongs to the given community.
 func isCommunityMember(communityID uint, userID uint) bool {
 	var m models.CommunityMember
 	return config.DB.Where("community_id = ? AND user_id = ?", communityID, userID).First(&m).Error == nil
 }
 
-// isCommunityAdmin checks if userID is the admin of the given community.
 func isCommunityAdmin(communityID uint, userID uint) bool {
 	var c models.Community
 	config.DB.First(&c, communityID)
 	return c.AdminID == userID
 }
 
-// CreateChannel godoc
-// POST /api/communities/{id}/channels
 func CreateChannel(w http.ResponseWriter, r *http.Request) {
 	callerID := getUserIDFromCtx(r)
 	communityID := mux.Vars(r)["id"]
@@ -72,7 +68,6 @@ func CreateChannel(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(channel)
 }
 
-// GetCommunityChannels godoc
 // GET /api/communities/{id}/channels
 func GetCommunityChannels(w http.ResponseWriter, r *http.Request) {
 	callerID := getUserIDFromCtx(r)
@@ -96,7 +91,6 @@ func GetCommunityChannels(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(channels)
 }
 
-// GetChannel godoc
 // GET /api/channels/{id}
 func GetChannel(w http.ResponseWriter, r *http.Request) {
 	callerID := getUserIDFromCtx(r)
@@ -116,7 +110,6 @@ func GetChannel(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(channel)
 }
 
-// UpdateChannel godoc
 // PUT /api/channels/{id}
 func UpdateChannel(w http.ResponseWriter, r *http.Request) {
 	callerID := getUserIDFromCtx(r)
@@ -156,7 +149,6 @@ func UpdateChannel(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(channel)
 }
 
-// DeleteChannel godoc
 // DELETE /api/channels/{id}
 func DeleteChannel(w http.ResponseWriter, r *http.Request) {
 	callerID := getUserIDFromCtx(r)
