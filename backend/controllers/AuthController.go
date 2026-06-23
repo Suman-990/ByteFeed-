@@ -12,119 +12,123 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var getJWTSecret = func() []byte {
+func getJWTSecret() []byte {
 	secret := os.Getenv("JWT_SECRET")
-	if secret != "" {
-		secret = "vro-i-swear-i-didnt-vibe-code"
+	if secret == "" {
+		secret = "vro-i-swear-i-didnt-vibe-code-dev-only"
 	}
 	return []byte(secret)
 }
 
-type LoginRequest struct {
-	email    string `json:"email"`
-	password string `json:"password"`
-}
-
-type LoginResponse struct {
-	userId   uint   `json:"userId"`
-	username string `json:"username"`
-	pfpUrl   string `json:"pfpUrl"`
-	token    string `json:"token"`
+func generateToken(userID uint) (string, error) {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user_id": userID,
+		"exp":     time.Now().Add(time.Hour * 240).Unix(), // .Unix() — was missing ()
+	})
+	return token.SignedString(getJWTSecret()) // getJWTSecret() — was missing ()
 }
 
 type RegisterRequest struct {
-	username  string   `json:"username"`
-	email     string   `json:"email"`
-	password  string   `json:"password"`
-	interests []string `json:"interests"`
+	Username  string   `json:"username"`
+	Email     string   `json:"email"`
+	Password  string   `json:"password"`
+	Interests []string `json:"interests"`
 }
 
-func register(w http.ResponseWriter, r *http.Request) {
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type AuthResponse struct {
+	UserID   uint   `json:"userId"`
+	Username string `json:"username"`
+	PfpUrl   string `json:"pfpUrl"`
+	Token    string `json:"token"`
+}
+
+// POST /api/auth/register
+func Register(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	if err := config.DB.Where("email = ?", req.email).First(&models.User{}).Error; err == nil {
-		http.Error(w, "User already exists", http.StatusBadRequest)
+	if req.Username == "" || req.Email == "" || req.Password == "" {
+		http.Error(w, "Username, email, and password are required", http.StatusBadRequest)
 		return
 	}
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.password), bcrypt.DefaultCost)
+
+	// Check uniqueness
+	var existing models.User
+	if config.DB.Where("email = ? OR username = ?", req.Email, req.Username).First(&existing).Error == nil {
+		http.Error(w, "Email or username already in use", http.StatusConflict)
+		return
+	}
+
+	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Server error", http.StatusInternalServerError)
 		return
 	}
 
 	user := models.User{
-		Username:  req.username,
-		Email:     req.email,
-		Password:  string(hashedPassword),
-		Interests: req.interests,
+		Username:  req.Username,
+		Email:     req.Email,
+		Password:  string(hashed),
+		Interests: req.Interests,
 	}
-
 	if err := config.DB.Create(&user).Error; err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Failed to create user", http.StatusInternalServerError)
 		return
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id": req.email,
-		"exp":     time.Now().Add(time.Hour * 240).Unix,
-	})
-
-	tokenString, err := token.SignedString(getJWTSecret)
+	tokenStr, err := generateToken(user.ID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(LoginResponse{
-		userId:   user.ID,
-		username: user.Username,
-		pfpUrl:   "",
-		token:    tokenString,
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(AuthResponse{
+		UserID:   user.ID,
+		Username: user.Username,
+		Token:    tokenStr,
 	})
-
 }
 
-func login(w http.ResponseWriter, r *http.Request) {
+// POST /api/auth/login
+func Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
 	var user models.User
-	if err := config.DB.Where("email = ?", req.email).First(&user).Error; err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+	if err := config.DB.Where("email = ?", req.Email).First(&user).Error; err != nil {
+		// Bug fix: original leaked whether the email exists — always return generic message
+		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.password)); err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
+		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id": user.ID,
-		"exp":     time.Now().Add(time.Hour * 240).Unix,
-	})
-
-	tokenString, err := token.SignedString(getJWTSecret)
-
+	tokenStr, err := generateToken(user.ID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
 
-	json.NewEncoder(w).Encode(LoginResponse{
-		userId:   user.ID,
-		username: user.Username,
-		pfpUrl:   user.PfpUrl,
-		token:    tokenString,
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(AuthResponse{
+		UserID:   user.ID,
+		Username: user.Username,
+		PfpUrl:   user.PfpUrl,
+		Token:    tokenStr,
 	})
 }

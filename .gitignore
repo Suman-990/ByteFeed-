@@ -1,0 +1,5 @@
+.env 
+node_modules
+backend/.env
+app-client/Bytefeed/.env
+app-client/Bytefeed/node_modules

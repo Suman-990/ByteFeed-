@@ -1,16 +1,14 @@
 package models
 
-import (
-	"time"
-
-	"gorm.io/gorm"
-)
+import "gorm.io/gorm"
 
 type Comment struct {
 	gorm.Model
-	ID        uint      `gorm:"primarykey;autoIncrement" json:"id"`
-	Content   string    `json:"content"`
-	UserID    uint      `json:"userId"`
-	PostID    uint      `json:"postId"`
-	CreatedAt time.Time `json:"createdAt"`
+	Content   string   `gorm:"not null" json:"content"`
+	UserID    uint     `gorm:"not null;index" json:"userId"`
+	User      User     `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	PostID    uint     `gorm:"not null;index" json:"postId"`
+	ParentID  *uint    `gorm:"index" json:"parentId"` // nil = top-level comment; set = reply
+	UpVotes   int      `gorm:"default:0" json:"upVotes"`
+	DownVotes int      `gorm:"default:0" json:"downVotes"`
 }

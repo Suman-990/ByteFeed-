@@ -1,19 +1,16 @@
 package models
 
-import (
-	"time"
+import "gorm.io/gorm"
 
-	"gorm.io/gorm"
-)
-
-type community struct {
+// Community is like a Discord server — has channels inside for chat/voice, and also supports posts
+type Community struct {
 	gorm.Model
-	Id        uint      `gorm:"primarykey;autoincrement" json:"id"`
-	Admin     uint      `json:"admin"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"createdAt"`
-	About     string    `json:"about"`
-	Topics    []string  `json:"topics"`
-	Icon      string    `json:"icon"`
-	Members   []uint    `json:"members"`
+	Name        string   `gorm:"uniqueIndex;not null" json:"name"`
+	AdminID     uint     `gorm:"not null" json:"adminId"`
+	About       string   `json:"about"`
+	Topics      []string `gorm:"serializer:json" json:"topics"`
+	IconUrl     string   `json:"iconUrl"`
+	BannerUrl   string   `json:"bannerUrl"`
+	MemberCount int      `gorm:"default:1" json:"memberCount"`
+	IsPrivate   bool     `gorm:"default:false" json:"isPrivate"`
 }
