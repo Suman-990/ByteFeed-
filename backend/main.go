@@ -21,6 +21,7 @@ func main() {
 	// Initialise DB and Cloudinary
 	config.ConnectDB()
 	config.ConnectCloudinary()
+	config.ConnectLiveKit()
 
 	// Set up router
 	r := mux.NewRouter()

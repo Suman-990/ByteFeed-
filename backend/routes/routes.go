@@ -76,6 +76,7 @@ func RegisterRoutes(r *mux.Router) {
 	protected.HandleFunc("/channels/{id}", controllers.UpdateChannel).Methods(http.MethodPut)
 	protected.HandleFunc("/channels/{id}", controllers.DeleteChannel).Methods(http.MethodDelete)
 	protected.HandleFunc("/channels/{id}/messages", controllers.GetChannelMessages).Methods(http.MethodGet)
+	protected.HandleFunc("/channels/{id}/voice-token", controllers.GetVoiceToken).Methods(http.MethodGet)
 
 	// Messages
 	protected.HandleFunc("/messages", controllers.SendMessage).Methods(http.MethodPost)
@@ -83,6 +84,8 @@ func RegisterRoutes(r *mux.Router) {
 	protected.HandleFunc("/messages/{id}", controllers.EditMessage).Methods(http.MethodPut)
 	protected.HandleFunc("/messages/{id}", controllers.DeleteMessage).Methods(http.MethodDelete)
 	protected.HandleFunc("/dm/{userId}", controllers.GetDMHistory).Methods(http.MethodGet)
+	protected.HandleFunc("/dm", controllers.GetDMList).Methods(http.MethodGet)
+	protected.HandleFunc("/dm/{userId}/call-token", controllers.GetDMCallToken).Methods(http.MethodGet)
 
 	// ── WebSocket (auth handled inside handler via ?token=<jwt>) ──────────────
 	// WS routes are on the root router (not the /api subrouter) and do NOT go
