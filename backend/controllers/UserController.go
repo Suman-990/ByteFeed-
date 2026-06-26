@@ -5,6 +5,7 @@ import (
 	"bytefeed-backend/models"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -111,6 +112,27 @@ func DeleteUser(w http.ResponseWriter, r *http.Request) {
 
 	config.DB.Delete(&user)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// SearchUsers godoc
+// GET /api/users/search?q=john&page=1
+func SearchUsers(w http.ResponseWriter, r *http.Request) {
+	callerID := getUserIDFromCtx(r)
+	q := r.URL.Query().Get("q")
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
+	if q == "" {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]models.User{})
+		return
+	}
+	var users []models.User
+	config.DB.Where("(username ILIKE ? OR email ILIKE ?) AND id != ?", "%"+q+"%", "%"+q+"%", callerID).
+		Order("username ASC").Limit(20).Offset((page - 1) * 20).Find(&users)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(users)
 }
 
 // ---- Friend System ----

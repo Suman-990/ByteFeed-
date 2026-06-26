@@ -132,6 +132,29 @@ export default function CommunityDetailPage() {
         }
         contentContainerClassName="pb-[100px]"
       />
+
+      {/* Admin FAB for Channel Management */}
+      {activeTab === 'channels' && (user?.id === community?.AdminID || user?.id === community?.adminId) && (
+        <TouchableOpacity
+          className="absolute bottom-6 right-4 bg-black px-5 py-3.5 rounded-sm flex-row items-center gap-2 shadow-md shadow-black/15 elevation-4"
+          onPress={() => router.push({ pathname: '/channel/create', params: { communityId: id } })}
+          activeOpacity={0.8}
+        >
+          <Text className="text-white text-lg">+</Text>
+          <Text className="text-white text-[13px] font-bold">Channel</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Member FAB for Post Creation */}
+      {activeTab === 'posts' && isMember && (
+        <TouchableOpacity
+          className="absolute bottom-6 right-4 w-14 h-14 bg-black rounded-full justify-center items-center shadow-md shadow-black/15 elevation-4"
+          onPress={() => router.push({ pathname: '/post/create', params: { communityId: id } })}
+          activeOpacity={0.8}
+        >
+          <Text className="text-[28px] text-white leading-[30px]">+</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }

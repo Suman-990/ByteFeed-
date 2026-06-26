@@ -5,7 +5,7 @@ import "gorm.io/gorm"
 type Post struct {
 	gorm.Model
 	AuthorID    uint       `gorm:"not null;index" json:"authorId"`
-	Author      User       `gorm:"foreignKey:AuthorID" json:"author,omitempty"`
+	Author      User       `gorm:"foreignKey:AuthorID" json:"author"`
 	Title       string     `json:"title"`
 	Content     string     `json:"content"`
 	ImageUrls   []string   `gorm:"serializer:json" json:"imageUrls"`

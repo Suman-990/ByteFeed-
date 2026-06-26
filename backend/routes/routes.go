@@ -28,6 +28,7 @@ func RegisterRoutes(r *mux.Router) {
 	protected.HandleFunc("/users/me/banner", controllers.UploadBanner).Methods(http.MethodPost)
 	protected.HandleFunc("/users/me/saved", controllers.GetSavedPosts).Methods(http.MethodGet)
 	protected.HandleFunc("/users/me/friend-requests", controllers.GetFriendRequests).Methods(http.MethodGet)
+	protected.HandleFunc("/users/search", controllers.SearchUsers).Methods(http.MethodGet)
 	protected.HandleFunc("/users/{id}", controllers.GetUser).Methods(http.MethodGet)
 	protected.HandleFunc("/users/{id}", controllers.UpdateUser).Methods(http.MethodPut)
 	protected.HandleFunc("/users/{id}", controllers.DeleteUser).Methods(http.MethodDelete)
