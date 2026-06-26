@@ -2,6 +2,9 @@ import React, { useContext } from 'react';
 import { StatusBar, View, Text, ActivityIndicator } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { registerGlobals } from '@livekit/react-native';
+registerGlobals();
+
 import { AuthProvider, AuthContext } from './auth/AuthContext';
 import '../global.css';
 

@@ -22,7 +22,7 @@ var (
 func ConnectLiveKit() {
 	LiveKitAPIKey = os.Getenv("LIVEKIT_API_KEY")
 	LiveKitAPISecret = os.Getenv("LIVEKIT_API_SECRET")
-	LiveKitHost = os.Getenv("LIVEKIT_HOST")
+	LiveKitHost = os.Getenv("LIVEKIT_URL")
 
 	if LiveKitAPIKey == "" || LiveKitAPISecret == "" || LiveKitHost == "" {
 		log.Println("⚠️  LiveKit credentials not set — voice/call features will be disabled")

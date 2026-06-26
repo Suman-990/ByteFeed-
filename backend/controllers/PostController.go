@@ -59,10 +59,11 @@ func CreatePost(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetFeed godoc
-// GET /api/posts/feed?filter=global|interests&page=1&limit=20
+// GET /api/posts/feed?page=1&limit=20
+// By default, interest-matched posts are returned first, then recent posts fill
+// the remainder so the user always gets a full page.
 func GetFeed(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromCtx(r)
-	filter := r.URL.Query().Get("filter") // "interests" or "global" (default)
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if page < 1 {
@@ -73,20 +74,46 @@ func GetFeed(w http.ResponseWriter, r *http.Request) {
 	}
 	offset := (page - 1) * limit
 
-	query := config.DB.Preload("Author").Where("community_id IS NULL").
-		Order("created_at DESC").Limit(limit).Offset(offset)
-
-	if filter == "interests" {
-		var user models.User
-		config.DB.First(&user, userID)
-		if len(user.Interests) > 0 {
-			// Find posts where any tag matches any user interest
-			query = query.Where("tags::jsonb ?| array[?]", user.Interests)
-		}
-	}
+	// Load user to get their interests
+	var user models.User
+	config.DB.First(&user, userID)
 
 	var posts []models.Post
-	query.Find(&posts)
+
+	if len(user.Interests) > 0 {
+		// Step 1: Fetch interest-matched posts first
+		var interestPosts []models.Post
+		config.DB.Preload("Author").Where("community_id IS NULL").
+			Where("EXISTS (SELECT 1 FROM jsonb_array_elements_text(tags) t WHERE t.value ILIKE ANY(ARRAY[?]))", user.Interests).
+			Order("created_at DESC").Limit(limit).Offset(offset).Find(&interestPosts)
+
+		if len(interestPosts) >= limit {
+			posts = interestPosts
+		} else {
+			// Step 2: Fill remaining slots with non-matching recent posts
+			interestIDs := make([]uint, len(interestPosts))
+			for i, p := range interestPosts {
+				interestIDs[i] = p.ID
+			}
+			remaining := limit - len(interestPosts)
+			var fillPosts []models.Post
+			q := config.DB.Preload("Author").Where("community_id IS NULL").
+				Order("created_at DESC").Limit(remaining)
+			if len(interestIDs) > 0 {
+				q = q.Where("id NOT IN ?", interestIDs)
+			}
+			// Adjust offset for the fill query on subsequent pages
+			if page > 1 {
+				q = q.Offset(offset - len(interestPosts))
+			}
+			q.Find(&fillPosts)
+			posts = append(interestPosts, fillPosts...)
+		}
+	} else {
+		// No interests set — plain chronological feed
+		config.DB.Preload("Author").Where("community_id IS NULL").
+			Order("created_at DESC").Limit(limit).Offset(offset).Find(&posts)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(posts)
