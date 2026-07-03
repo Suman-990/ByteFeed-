@@ -90,10 +90,22 @@ export default function FeedScreen() {
 
   const handleVote = async (postId: number, value: number) => {
     try {
-      await api.post(`/posts/${postId}/vote`, { value });
-      const res = await api.get(`/posts/${postId}`);
+      // The vote endpoint now returns the full post WITH author preloaded.
+      // We merge only the vote-count fields to avoid losing any local state.
+      const res = await api.post(`/posts/${postId}/vote`, { value });
+      const updated = res.data;
       setPosts((prev) =>
-        prev.map((p) => ((p.ID || p.id) === postId ? { ...p, ...res.data } : p))
+        prev.map((p) => {
+          if ((p.ID || p.id) !== postId) return p;
+          // Merge upVotes / downVotes from response but keep existing author
+          // (VotePost backend now returns Author, so this is doubly safe)
+          return {
+            ...p,
+            upVotes: updated.upVotes ?? updated.UpVotes ?? p.upVotes,
+            downVotes: updated.downVotes ?? updated.DownVotes ?? p.downVotes,
+            author: updated.author || p.author,
+          };
+        })
       );
     } catch (e) {
       console.error('Vote failed', e);

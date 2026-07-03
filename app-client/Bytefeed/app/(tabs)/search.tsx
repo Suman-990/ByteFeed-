@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, TextInput, FlatList, TouchableOpacity, ActivityIndicator, Image, Alert,
 } from 'react-native';
@@ -15,6 +15,7 @@ interface CommunityResult {
   description?: string;
   iconUrl?: string;
   memberCount?: number;
+  isMember?: boolean;
 }
 
 interface UserResult {
@@ -32,13 +33,13 @@ export default function SearchScreen() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
-  const [searched, setSearched] = useState(false);
   const [activeTab, setActiveTab] = useState<SearchType>('communities');
 
-  const handleSearch = useCallback(async (searchQuery: string, tab: SearchType) => {
-    if (!searchQuery.trim()) { setResults([]); setSearched(false); return; }
+  // Root cause: previously returned nothing until a query was typed.
+  // Now calls the API with an empty query which returns defaults (most popular
+  // communities or most recently registered users).
+  const doSearch = useCallback(async (searchQuery: string, tab: SearchType) => {
     setLoading(true);
-    setSearched(true);
     try {
       if (tab === 'communities') {
         const res = await api.get(`/communities/search?q=${encodeURIComponent(searchQuery)}`);
@@ -49,6 +50,7 @@ export default function SearchScreen() {
           description: c.about || c.description,
           iconUrl: c.iconUrl,
           memberCount: c.memberCount,
+          isMember: c.isMember ?? false,
         })));
       } else {
         const res = await api.get(`/users/search?q=${encodeURIComponent(searchQuery)}`);
@@ -68,11 +70,40 @@ export default function SearchScreen() {
     }
   }, []);
 
+  // Load defaults immediately when the screen mounts or tab changes
+  useEffect(() => {
+    doSearch(query, activeTab);
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleQueryChange = (text: string) => {
+    setQuery(text);
+    doSearch(text, activeTab);
+  };
+
   const switchTab = (tab: SearchType) => {
     setActiveTab(tab);
-    setResults([]);
-    setSearched(false);
-    if (query.trim()) handleSearch(query, tab);
+    setQuery('');
+    // useEffect above will trigger doSearch('', tab)
+  };
+
+  const handleJoinLeave = async (communityId: number, isMember: boolean) => {
+    try {
+      if (isMember) {
+        await api.delete(`/communities/${communityId}/leave`);
+      } else {
+        await api.post(`/communities/${communityId}/join`);
+      }
+      // Optimistic toggle in search results
+      setResults((prev) =>
+        prev.map((r) =>
+          r.type === 'community' && r.id === communityId
+            ? { ...r, isMember: !isMember, memberCount: (r.memberCount || 0) + (isMember ? -1 : 1) }
+            : r
+        )
+      );
+    } catch (e: any) {
+      Alert.alert('Error', typeof e?.response?.data === 'string' ? e.response.data : 'Could not update membership');
+    }
   };
 
   const handleSendFriendRequest = async (userId: number) => {
@@ -103,7 +134,14 @@ export default function SearchScreen() {
           <Text className="text-[11px] text-[#7e7576] mt-1 font-mono">👥 {item.memberCount} members</Text>
         )}
       </View>
-      <Text className="text-base text-[#cfc4c5]">→</Text>
+      <TouchableOpacity
+        className={`px-3 py-1.5 rounded-sm border ${item.isMember ? 'bg-white border-[#cfc4c5]' : 'bg-black border-black'}`}
+        onPress={() => handleJoinLeave(item.id, !!item.isMember)}
+      >
+        <Text className={`text-xs font-semibold ${item.isMember ? 'text-[#5d5f5f]' : 'text-white'}`}>
+          {item.isMember ? 'Joined' : 'Join'}
+        </Text>
+      </TouchableOpacity>
     </TouchableOpacity>
   );
 
@@ -128,6 +166,10 @@ export default function SearchScreen() {
     </View>
   );
 
+  const headerTitle = query === ''
+    ? activeTab === 'communities' ? 'Discover Communities' : 'Discover Users'
+    : `Results for "${query}"`;
+
   return (
     <View className="flex-1 bg-[#f9f9f9]">
       <View className="bg-[#f9f9f9] border-b border-[#cfc4c5]" style={{ paddingTop: insets.top }}>
@@ -140,13 +182,13 @@ export default function SearchScreen() {
               placeholder={activeTab === 'communities' ? 'Search communities...' : 'Search users...'}
               placeholderTextColor="#9e9e9e"
               value={query}
-              onChangeText={(text) => { setQuery(text); handleSearch(text, activeTab); }}
+              onChangeText={handleQueryChange}
               autoCapitalize="none"
               returnKeyType="search"
-              onSubmitEditing={() => handleSearch(query, activeTab)}
+              onSubmitEditing={() => doSearch(query, activeTab)}
             />
             {query.length > 0 && (
-              <TouchableOpacity onPress={() => { setQuery(''); setResults([]); setSearched(false); }}>
+              <TouchableOpacity onPress={() => { setQuery(''); doSearch('', activeTab); }}>
                 <Text className="text-base text-[#5d5f5f]">✕</Text>
               </TouchableOpacity>
             )}
@@ -180,17 +222,20 @@ export default function SearchScreen() {
           renderItem={({ item }) =>
             item.type === 'community' ? renderCommunity(item) : renderUser(item)
           }
+          ListHeaderComponent={
+            results.length > 0 ? (
+              <Text className="text-[11px] font-bold tracking-[1.1px] text-[#5d5f5f] uppercase mb-3">
+                {headerTitle}
+              </Text>
+            ) : null
+          }
           ListEmptyComponent={
             <View className="items-center pt-15">
               <Text className="text-lg font-semibold text-black mb-2">
-                {searched ? 'No results found' : 'Discover'}
+                {query ? 'No results found' : 'Nothing here yet'}
               </Text>
               <Text className="text-sm text-[#5d5f5f] text-center">
-                {searched
-                  ? 'Try a different search term'
-                  : activeTab === 'communities'
-                    ? 'Search for communities to explore'
-                    : 'Search for users to add as friends'}
+                {query ? 'Try a different search term' : 'Check back later'}
               </Text>
             </View>
           }

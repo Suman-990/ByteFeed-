@@ -1,11 +1,10 @@
-import React, { useEffect, useState, useContext } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, FlatList, ActivityIndicator, TouchableOpacity, Image, RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import api from '../api';
-import { AuthContext } from '../auth/AuthContext';
 
 interface Community {
   ID?: number; id?: number; name: string; about?: string; description?: string;
@@ -18,22 +17,29 @@ export default function CommunitiesTab() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchCommunities = async () => {
+  // Root cause fix: previously called /communities/search which returns ALL communities.
+  // The Communities tab should only show communities the logged-in user has joined.
+  // Non-joined communities appear in the Search tab via /communities/search.
+  const fetchCommunities = useCallback(async () => {
     try {
-      const res = await api.get('/communities/search');
+      const res = await api.get('/users/me/communities');
       setCommunities(res.data || []);
-    } catch (e) { console.error('Failed to load communities', e); }
-    finally { setLoading(false); setRefreshing(false); }
-  };
+    } catch (e) {
+      console.error('Failed to load communities', e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
-  useEffect(() => { fetchCommunities(); }, []);
+  useEffect(() => { fetchCommunities(); }, [fetchCommunities]);
 
-  const handleJoin = async (communityId: number, isMember: boolean) => {
+  const handleLeave = async (communityId: number) => {
     try {
-      if (isMember) await api.delete(`/communities/${communityId}/leave`);
-      else await api.post(`/communities/${communityId}/join`);
-      fetchCommunities();
-    } catch (e) { console.error('Failed to update membership', e); }
+      await api.delete(`/communities/${communityId}/leave`);
+      // Optimistic update — remove from list immediately
+      setCommunities((prev) => prev.filter((c) => (c.ID || c.id) !== communityId));
+    } catch (e) { console.error('Failed to leave community', e); }
   };
 
   const getCId = (c: Community) => c.ID || c.id || 0;
@@ -47,7 +53,7 @@ export default function CommunitiesTab() {
       <View className="bg-[#f9f9f9] border-b border-[#cfc4c5]" style={{ paddingTop: insets.top }}>
         <View className="h-14 flex-row justify-between items-center px-4">
           <Text className="text-2xl font-bold text-black tracking-tight">Communities</Text>
-          <Text className="text-[13px] text-[#5d5f5f] font-mono">{communities.length} total</Text>
+          <Text className="text-[13px] text-[#5d5f5f] font-mono">{communities.length} joined</Text>
         </View>
       </View>
 
@@ -55,7 +61,13 @@ export default function CommunitiesTab() {
         data={communities}
         keyExtractor={(item) => getCId(item).toString()}
         contentContainerClassName="p-4 pb-[100px]"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchCommunities(); }} tintColor="#000000" />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => { setRefreshing(true); fetchCommunities(); }}
+            tintColor="#000000"
+          />
+        }
         renderItem={({ item }) => {
           const cId = getCId(item);
           return (
@@ -86,13 +98,12 @@ export default function CommunitiesTab() {
                 <Text className="text-sm text-[#4c4546] mb-3 leading-[21px]" numberOfLines={2}>
                   {item.about || item.description || 'No description available'}
                 </Text>
+                {/* User is always a member on this screen — show Leave button only */}
                 <TouchableOpacity
-                  className={`py-2.5 px-4 rounded-sm items-center border ${item.isMember ? 'bg-white border-[#cfc4c5]' : 'bg-black border-black'}`}
-                  onPress={() => handleJoin(cId, !!item.isMember)}
+                  className="py-2.5 px-4 rounded-sm items-center border bg-white border-[#cfc4c5]"
+                  onPress={() => handleLeave(cId)}
                 >
-                  <Text className={`text-[13px] font-semibold ${item.isMember ? 'text-[#5d5f5f]' : 'text-white'}`}>
-                    {item.isMember ? 'Joined ✓' : 'Join Community'}
-                  </Text>
+                  <Text className="text-[13px] font-semibold text-[#5d5f5f]">Joined ✓ · Leave</Text>
                 </TouchableOpacity>
               </View>
             </TouchableOpacity>
@@ -100,8 +111,10 @@ export default function CommunitiesTab() {
         }}
         ListEmptyComponent={
           <View className="items-center pt-15">
-            <Text className="text-lg font-semibold text-black mb-2">No communities found</Text>
-            <Text className="text-sm text-[#5d5f5f]">Be the first to create one!</Text>
+            <Text className="text-lg font-semibold text-black mb-2">No communities yet</Text>
+            <Text className="text-sm text-[#5d5f5f] text-center">
+              Discover communities from the Search tab and join them
+            </Text>
           </View>
         }
       />

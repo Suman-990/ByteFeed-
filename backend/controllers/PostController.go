@@ -211,7 +211,7 @@ func DeletePost(w http.ResponseWriter, r *http.Request) {
 }
 
 // VotePost godoc
-// POST /api/posts/{id}/vote   body: {"value": 1} or {"value": -1}
+// POST /api/posts/{id}/vote   body: {"value": 1} or {"value": -1} or {"value": 0} to remove
 func VotePost(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromCtx(r)
 	postID := mux.Vars(r)["id"]
@@ -237,29 +237,28 @@ func VotePost(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		// Existing vote — change or remove
 		if vote.Value == body.Value {
-			// Same vote again → remove vote
+			// Same vote again → remove vote (toggle off)
 			if vote.Value == 1 {
 				config.DB.Model(&post).Update("up_votes", post.UpVotes-1)
 			} else {
 				config.DB.Model(&post).Update("down_votes", post.DownVotes-1)
 			}
 			config.DB.Delete(&vote)
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		// Switching vote direction
-		oldVal := vote.Value
-		config.DB.Model(&vote).Update("value", body.Value)
-		if oldVal == 1 {
-			config.DB.Model(&post).Updates(map[string]interface{}{
-				"up_votes":   post.UpVotes - 1,
-				"down_votes": post.DownVotes + 1,
-			})
 		} else {
-			config.DB.Model(&post).Updates(map[string]interface{}{
-				"up_votes":   post.UpVotes + 1,
-				"down_votes": post.DownVotes - 1,
-			})
+			// Switching vote direction
+			oldVal := vote.Value
+			config.DB.Model(&vote).Update("value", body.Value)
+			if oldVal == 1 {
+				config.DB.Model(&post).Updates(map[string]interface{}{
+					"up_votes":   post.UpVotes - 1,
+					"down_votes": post.DownVotes + 1,
+				})
+			} else {
+				config.DB.Model(&post).Updates(map[string]interface{}{
+					"up_votes":   post.UpVotes + 1,
+					"down_votes": post.DownVotes - 1,
+				})
+			}
 		}
 	} else {
 		// New vote
@@ -276,7 +275,9 @@ func VotePost(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	config.DB.First(&post, post.ID)
+	// Reload with Author so the response is complete — this is what the feed uses
+	// to update the post card without losing author info.
+	config.DB.Preload("Author").First(&post, post.ID)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(post)
 }
@@ -344,6 +345,8 @@ func UploadPostImage(w http.ResponseWriter, r *http.Request) {
 	newUrls := append(post.ImageUrls, result.URL)
 	config.DB.Model(&post).Update("image_urls", newUrls)
 
+	// Return the full updated post (with Author) so the client can update state
+	config.DB.Preload("Author").First(&post, post.ID)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	json.NewEncoder(w).Encode(post)
 }
