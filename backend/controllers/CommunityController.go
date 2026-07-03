@@ -83,7 +83,11 @@ func GetCommunity(w http.ResponseWriter, r *http.Request) {
 
 // SearchCommunities godoc
 // GET /api/communities/search?q=golang&page=1
+// When q is empty, returns the 20 most popular communities — powers the Search
+// screen's default "Discover communities" state.
+// Each result includes isMember=true/false for the authenticated caller.
 func SearchCommunities(w http.ResponseWriter, r *http.Request) {
+	callerID := getUserIDFromCtx(r)
 	q := r.URL.Query().Get("q")
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	if page < 1 {
@@ -92,9 +96,35 @@ func SearchCommunities(w http.ResponseWriter, r *http.Request) {
 	var communities []models.Community
 	config.DB.Where("name ILIKE ? OR about ILIKE ?", "%"+q+"%", "%"+q+"%").
 		Order("member_count DESC").Limit(20).Offset((page - 1) * 20).Find(&communities)
+
+	// Build membership set for caller
+	communityIDs := make([]uint, len(communities))
+	for i, c := range communities {
+		communityIDs[i] = c.ID
+	}
+	memberSet := make(map[uint]bool)
+	if len(communityIDs) > 0 {
+		var memberships []models.CommunityMember
+		config.DB.Where("community_id IN ? AND user_id = ?", communityIDs, callerID).Find(&memberships)
+		for _, m := range memberships {
+			memberSet[m.CommunityID] = true
+		}
+	}
+
+	type CommunityWithMembership struct {
+		models.Community
+		IsMember bool `json:"isMember"`
+	}
+
+	result := make([]CommunityWithMembership, 0, len(communities))
+	for _, c := range communities {
+		result = append(result, CommunityWithMembership{Community: c, IsMember: memberSet[c.ID]})
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(communities)
+	json.NewEncoder(w).Encode(result)
 }
+
 
 // UpdateCommunity godoc
 // PUT /api/communities/{id}

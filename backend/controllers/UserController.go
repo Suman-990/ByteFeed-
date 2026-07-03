@@ -116,6 +116,8 @@ func DeleteUser(w http.ResponseWriter, r *http.Request) {
 
 // SearchUsers godoc
 // GET /api/users/search?q=john&page=1
+// When q is empty, returns the 20 most recently registered users (excluding caller).
+// This powers the Search screen's default "Discover users" state.
 func SearchUsers(w http.ResponseWriter, r *http.Request) {
 	callerID := getUserIDFromCtx(r)
 	q := r.URL.Query().Get("q")
@@ -123,14 +125,15 @@ func SearchUsers(w http.ResponseWriter, r *http.Request) {
 	if page < 1 {
 		page = 1
 	}
-	if q == "" {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]models.User{})
-		return
-	}
 	var users []models.User
-	config.DB.Where("(username ILIKE ? OR email ILIKE ?) AND id != ?", "%"+q+"%", "%"+q+"%", callerID).
-		Order("username ASC").Limit(20).Offset((page - 1) * 20).Find(&users)
+	if q == "" {
+		// No query — return recent users so the Search screen isn't blank on open
+		config.DB.Where("id != ?", callerID).
+			Order("created_at DESC").Limit(20).Offset((page - 1) * 20).Find(&users)
+	} else {
+		config.DB.Where("(username ILIKE ? OR email ILIKE ?) AND id != ?", "%"+q+"%", "%"+q+"%", callerID).
+			Order("username ASC").Limit(20).Offset((page - 1) * 20).Find(&users)
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(users)
 }
@@ -185,12 +188,31 @@ func SendFriendRequest(w http.ResponseWriter, r *http.Request) {
 
 // GetFriendRequests godoc
 // GET /api/users/me/friend-requests
+// Returns pending requests enriched with sender info so the frontend doesn't
+// need to make an extra GET /users/{id} call per request (eliminates N+1).
 func GetFriendRequests(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromCtx(r)
 	var requests []models.FriendRequest
 	config.DB.Where("receiver_id = ? AND status = 'pending'", userID).Find(&requests)
+
+	type EnrichedRequest struct {
+		models.FriendRequest
+		SenderUsername string `json:"senderUsername"`
+		SenderPfpUrl   string `json:"senderPfpUrl"`
+	}
+
+	result := make([]EnrichedRequest, 0, len(requests))
+	for _, req := range requests {
+		var sender models.User
+		if err := config.DB.First(&sender, req.SenderID).Error; err == nil {
+			result = append(result, EnrichedRequest{FriendRequest: req, SenderUsername: sender.Username, SenderPfpUrl: sender.PfpUrl})
+		} else {
+			result = append(result, EnrichedRequest{FriendRequest: req, SenderUsername: "Unknown"})
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(requests)
+	json.NewEncoder(w).Encode(result)
 }
 
 // RespondFriendRequest godoc
@@ -338,4 +360,61 @@ func GetSavedPosts(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(posts)
+}
+
+// GetMyCommunities godoc
+// GET /api/users/me/communities
+// Returns only the communities the authenticated user has joined.
+// The Communities tab uses this so it only shows communities the user is part of.
+func GetMyCommunities(w http.ResponseWriter, r *http.Request) {
+	userID := getUserIDFromCtx(r)
+
+	var members []models.CommunityMember
+	config.DB.Where("user_id = ?", userID).Find(&members)
+
+	communityIDs := make([]uint, len(members))
+	for i, m := range members {
+		communityIDs[i] = m.CommunityID
+	}
+
+	type CommunityWithMembership struct {
+		models.Community
+		IsMember bool `json:"isMember"`
+	}
+
+	var communities []models.Community
+	if len(communityIDs) > 0 {
+		config.DB.Where("id IN ?", communityIDs).Order("name ASC").Find(&communities)
+	}
+
+	result := make([]CommunityWithMembership, 0, len(communities))
+	for _, c := range communities {
+		result = append(result, CommunityWithMembership{Community: c, IsMember: true})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+// GetMyFriends godoc
+// GET /api/users/me/friends
+// Convenience alias — returns the authenticated user's friends list.
+// Used by the Messages tab to populate the "Start a conversation" list.
+func GetMyFriends(w http.ResponseWriter, r *http.Request) {
+	userID := getUserIDFromCtx(r)
+	var friendships []models.Friendship
+	config.DB.Where("user_id = ?", userID).Find(&friendships)
+
+	friendIDs := make([]uint, len(friendships))
+	for i, f := range friendships {
+		friendIDs[i] = f.FriendID
+	}
+
+	var friends []models.User
+	if len(friendIDs) > 0 {
+		config.DB.Where("id IN ?", friendIDs).Find(&friends)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(friends)
 }

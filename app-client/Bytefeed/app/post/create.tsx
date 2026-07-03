@@ -51,20 +51,43 @@ export default function CreatePostPage() {
     try {
       const postData: any = { title, content, tags };
       if (params.communityId) postData.communityId = parseInt(params.communityId, 10);
+
       let created: any;
-      if (isEditing) { const r = await api.put(`/posts/${params.editPostId}`, postData); created = r.data; }
-      else { const r = await api.post('/posts', postData); created = r.data; }
+      if (isEditing) {
+        const r = await api.put(`/posts/${params.editPostId}`, postData);
+        created = r.data;
+      } else {
+        const r = await api.post('/posts', postData);
+        created = r.data;
+      }
+
+      // Upload image BEFORE navigating away — the component must remain mounted
+      // for the async FormData upload to complete. Previously this ran after
+      // router.back(), causing the upload to be silently cancelled.
       if (selectedImage && !selectedImage.startsWith('http')) {
         const pId = created.ID || created.id;
         const fd = new FormData();
         fd.append('file', { uri: selectedImage, type: 'image/jpeg', name: 'post-image.jpg' } as any);
-        try { await api.post(`/posts/${pId}/image`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }); } catch {}
+        try {
+          await api.post(`/posts/${pId}/image`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        } catch (imgErr) {
+          console.error('Image upload failed', imgErr);
+          // Post was created — notify the user the text was saved but image failed
+          Alert.alert('Post saved', 'The post was created but the image could not be uploaded.');
+          router.back();
+          return;
+        }
       }
+
       Alert.alert('Success', isEditing ? 'Post updated' : 'Post published');
       router.back();
-    } catch { Alert.alert('Error', 'Failed to submit post'); }
-    finally { setLoading(false); }
+    } catch {
+      Alert.alert('Error', 'Failed to submit post');
+    } finally {
+      setLoading(false);
+    }
   };
+
 
   const toggleTag = (tag: string) => setTags((p) => p.includes(tag) ? p.filter((t) => t !== tag) : [...p, tag]);
 
